@@ -1,7 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
-import "./App.css";
+import "../../App.css";
 import io from "socket.io-client";
-import Peer from "simple-peer";
 import styled from "styled-components";
 
 const Container = styled.div`
@@ -22,7 +21,7 @@ const Video = styled.video`
   height: 50%;
 `;
 
-function App() {
+function Home() {
   const [yourID, setYourID] = useState("");
   const [users, setUsers] = useState({});
   const [stream, setStream] = useState();
@@ -38,14 +37,48 @@ function App() {
 
   useEffect(() => {
     socket.current = io("http://localhost:8000");
-    navigator.mediaDevices
-      .getUserMedia({ video: true, audio: true })
-      .then((stream) => {
+
+    navigator.webkitGetUserMedia(
+      { video: true, audio: true },
+      function (myStream) {
         setStream(stream);
-        if (userVideo.current) {
-          userVideo.current.srcObject = stream;
-        }
-      });
+
+        //displaying local video stream on the page
+        userVideo.current.srcObject = myStream;
+
+        //using Google public stun server
+        var configuration = {
+          iceServers: [{ url: "stun:stun2.1.google.com:19302" }],
+        };
+
+        pc.current = new RTCPeerConnection(configuration);
+
+        // setup stream listening
+        pc.current.addStream(myStream);
+
+        //when a remote user adds stream to the peer connection, we display it
+        pc.current.onaddstream = function (e) {
+          partnerVideo.current.srcObject = e.stream;
+        };
+
+        // Setup ice handling
+        socket.current.on("candidate", (candidate) => {
+          console.log("CANDIDATE RECEIVED", candidate);
+          pc.current
+            .addIceCandidate(candidate)
+            .catch((error) => console.error(error));
+          // this.remotePeerConnection.addIceCandidate(candidate).catch(error => console.error(error));
+        });
+        // pc.current.onicecandidate = function (event) {
+        //   if (event.candidate) {
+        //     pc.current.addIceCandidate(new RTCIceCandidate(event.candidate));
+        //   }
+        // };
+      },
+      function (error) {
+        console.log(error);
+      }
+    );
 
     socket.current.on("yourID", (id) => {
       setYourID(id);
@@ -61,15 +94,12 @@ function App() {
     });
   }, []);
 
-  console.log(pc.current, "pccccccc");
-
   function callPeer(id) {
-    pc.current = new RTCPeerConnection();
-    stream.getTracks().forEach((track) => pc.current.addTrack(track, stream));
-    pc.current.ontrack = (e) => {
-      console.log("hellloooooostreamm", e);
-      partnerVideo.current.srcObject = e.streams[0];
-    };  
+    pc.current.onicecandidate = (e) => {
+      const iceCandidate = e.candidate;
+      socket.current.emit("candidate", { to: id, candidate: iceCandidate });
+      console.log("candidate generated", e.candidate);
+    };
     pc.current
       .createOffer()
       .then((offer) => pc.current.setLocalDescription(offer))
@@ -86,30 +116,22 @@ function App() {
       });
 
     socket.current.on("callAccepted", (signal) => {
-      pc.current.ontrack = (e) => {
-        console.log(e.streams);
-        partnerVideo.current.srcObject = e.streams[0];
-      };
       console.log("received answerrr", signal);
       setCallAccepted(true);
-      pc.current.setRemoteDescription(signal);
+      pc.current.setRemoteDescription(new RTCSessionDescription(signal));
     });
   }
 
   function acceptCall() {
     setCallAccepted(true);
-    pc.current = new RTCPeerConnection();
-    stream.getTracks().forEach((track) => pc.current.addTrack(track, stream));
-    pc.current.ontrack = (e) => {
-      console.log("hellloooooostreamm111", e);
-      partnerVideo.current.srcObject = e.streams[0];
-    };  
+    pc.current.onicecandidate = (e) => {
+      const iceCandidate = e.candidate;
+      socket.current.emit("candidate", { to: caller, candidate: iceCandidate });
+      console.log("candidate generated", e.candidate);
+    };
     pc.current
-      .setRemoteDescription(callerSignal)
+      .setRemoteDescription(new RTCSessionDescription(callerSignal))
       .then(() => pc.current.createAnswer())
-      .then((ontrack) => {
-        console.log("ontrack", ontrack);
-      })
       .then((answer) => pc.current.setLocalDescription(answer))
       .then(() => {
         socket.current.emit("acceptCall", {
@@ -124,9 +146,9 @@ function App() {
   }
 
   let UserVideo;
-  if (stream) {
-    UserVideo = <Video playsInline muted ref={userVideo} autoPlay />;
-  }
+  // if (stream) {
+  UserVideo = <Video playsInline muted ref={userVideo} autoPlay />;
+  // }
 
   let PartnerVideo;
   if (callAccepted) {
@@ -161,4 +183,4 @@ function App() {
   );
 }
 
-export default App;
+export default Home;
