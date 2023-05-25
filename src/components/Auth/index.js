@@ -103,9 +103,20 @@ function LoginPage() {
       },
       body: JSON.stringify(userData),
     })
-      .then((response) => response.json())
+      .then((response) => {
+        // response.json()
+        console.log(response, 'response')
+        if (response.ok) {
+          console.log(response.headers)
+          const cookies = response.headers.get("jwttokenforwebrtc");
+          document.cookie = cookies; // Store the received cookie in the browser
+          // Handle successful login
+        } else {
+          // Handle login failure
+        }})
       .then((data) => {
         // Handle the response from the server
+        console.log(data)
         if (data.message) {
           window.alert(data.message);
         } else {
