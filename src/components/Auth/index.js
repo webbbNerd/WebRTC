@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../../settings";
+import Cookies from "universal-cookie";
 import * as Components from "./components";
 
 function LoginPage() {
@@ -11,6 +12,8 @@ function LoginPage() {
     email: "",
     password: "",
   });
+
+  const cookies = new Cookies();
 
   const handleInputChange = (e) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -103,21 +106,15 @@ function LoginPage() {
       },
       body: JSON.stringify(userData),
     })
-      .then((response) => {
-        // response.json()
-        console.log(response, 'response')
-        if (response.ok) {
-          console.log(response.headers)
-          const cookies = response.headers.get("jwttokenforwebrtc");
-          document.cookie = cookies; // Store the received cookie in the browser
-          // Handle successful login
-        } else {
-          // Handle login failure
-        }})
+      .then((response) => response.json())
       .then((data) => {
         // Handle the response from the server
-        console.log(data)
         if (data.message) {
+          cookies.set("jwttokenforwebrtc", data.token, {
+            path: "/",
+            expires: new Date(Date.now() + 25807238),
+          });
+          navigate("/");
           window.alert(data.message);
         } else {
           window.alert(data.error);
